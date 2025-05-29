@@ -3,6 +3,9 @@ import { AsyncLocalStorage } from "node:async_hooks";
 export type DependencyContextSetter<T> = (value: T) => void
 export type DependencyContextGetter<T> = () => T
 export type DependencyContext<T> = [DependencyContextGetter<T>, DependencyContextSetter<T>]
+export type DependencyContextOptions = {
+    name?: string
+}
 
 export class Dctx {
     private readonly storage = new AsyncLocalStorage<Map<symbol, unknown>>();
@@ -20,13 +23,15 @@ export class Dctx {
      * @param factory - A function that returns the instance of the class.
      * @returns A tuple containing the getter and setter for the singleton instance.
      */
-    createSingleton<T>(factory: () => T, name = factory.name): DependencyContext<T> {
+    createSingleton<T>(factory: () => T, options: Omit<DependencyContextOptions, "cached"> = {}): DependencyContext<T> {
+        const { name = factory.name } = options
         let instance: T
         this.logger?.(`Creating singleton for ${name}`)
         return [
             () => {
                 this.logger?.(`Resolving singleton for ${name}`)
-                return instance ||= this.callWithLogger(factory, `Creating singleton instance of ${name}`)
+                instance ||= this.callWithLogger(factory, `Creating singleton instance of ${name}`)
+                return instance
             },
             (i: T) => {
                 this.logger?.(`Setting singleton for ${name} with value ${i}`)
@@ -35,7 +40,8 @@ export class Dctx {
         ] as const
     }
 
-    createScoped<T>(factory: () => T, name = factory.name): DependencyContext<T> {
+    createScoped<T>(factory: () => T, options: DependencyContextOptions = {}): DependencyContext<T> {
+        const { name = factory.name } = options
         const key = Symbol()
         this.logger?.(`Creating scoped for ${name}`)
         const get = () => {
@@ -61,7 +67,7 @@ export class Dctx {
         return [get, set] as const
     }
 
-    run<T>(fn: () => Promise<T>): Promise<T> {
+    async run<T>(fn: () => Promise<T>): Promise<T> {
         if (this.storage.getStore()) throw new Error("Context already running")
         this.logger?.(`Running context`)
         return this.storage.run(new Map(), fn)
