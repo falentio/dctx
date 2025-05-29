@@ -62,6 +62,7 @@ export class Dctx {
     }
 
     run<T>(fn: () => Promise<T>): Promise<T> {
+        if (this.storage.getStore()) throw new Error("Context already running")
         this.logger?.(`Running context`)
         return this.storage.run(new Map(), fn)
     }
